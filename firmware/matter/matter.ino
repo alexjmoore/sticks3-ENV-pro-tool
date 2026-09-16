@@ -69,14 +69,14 @@ void setup() {
   // 4. Initialize BME688 sensor on Grove port
   bme.begin();
 
-  // 5. Initialize Matter Core Stack
-  Serial.println("[Matter] Initializing Matter runtime...");
-  Matter.begin();
-
-  // 6. Register Matter Endpoints
+  // 5. Register Matter Endpoints (MUST be before Matter.begin())
   matterTemp.begin(25.0);
   matterHum.begin(50.0);
   matterPress.begin(1013.25);
+
+  // 6. Initialize Matter Core Stack (Last step after all endpoints are registered)
+  Serial.println("[Matter] Initializing Matter runtime...");
+  Matter.begin();
 
   // Set initial QR code and manual pairing payload for UI
   ui.qrPayload = Matter.getOnboardingQRCodeUrl();
