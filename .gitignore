@@ -50,4 +50,5 @@ Thumbs.db
 # Build & packaging
 dist/
 build/
+bin/
 *.egg-info/
