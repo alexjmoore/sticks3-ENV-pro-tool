@@ -167,11 +167,11 @@ void loop() {
     // Auto-rotate between normal landscape (1) and inverted landscape (3)
     // Deadband hysteresis: only rotate when tilted distinctly (|az| < 0.85g)
     if (fabsf(ui.az) < 0.85f) {
-      if (ui.ax < -0.35f && ui.rotation != 1) {
+      if (ui.ax > 0.35f && ui.rotation != 1) {
         ui.rotation = 1;
         M5.Display.setRotation(1);
         ui.needsFullRedraw = true;
-      } else if (ui.ax > 0.35f && ui.rotation != 3) {
+      } else if (ui.ax < -0.35f && ui.rotation != 3) {
         ui.rotation = 3;
         M5.Display.setRotation(3);
         ui.needsFullRedraw = true;
