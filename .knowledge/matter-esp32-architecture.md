@@ -45,5 +45,9 @@ The firmware instantiates three standard Matter endpoints registered with the Ma
 - External Grove sensors (Unit ENV Pro) MUST be attached to `Wire` (hardware controller `I2C0` on GPIO 9/10).
 - Using `Wire1` (`I2C1`) in Arduino code collides directly with `M5.update()`, resulting in continuous communication failure on Grove Port A.
 
+### 7. Matter Endpoint Initialization Sequence Invariant
+- Matter endpoint instances (`matterTemp`, `matterHum`, `matterPress`) MUST call `.begin()` **prior to** calling `Matter.begin()`.
+- `Matter.begin()` builds the Matter data model and registers endpoint cluster attributes. Calling `endpoint.begin()` after `Matter.begin()` attempts to dereference unlinked attribute tables, triggering a panic (`LoadProhibited` / EXCVADDR `0x00000000`).
+
 ## Related Concepts
 - [M5Stack StickS3 Hardware Architecture and Sensor Bus Integration](./m5sticks3-uiflow-sensors.md)
