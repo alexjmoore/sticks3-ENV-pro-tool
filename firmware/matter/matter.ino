@@ -55,9 +55,11 @@ void setup() {
   auto cfg = M5.config();
   M5.begin(cfg);
 
-  // 2. Power on Grove 5V boost converter (AW35122 on GPIO 4)
+  // 2. Power on Grove 5V boost converter (AW35122 on GPIO 4 & M5pm1)
   M5.Power.setExtOutput(true);
-  delay(200);
+  pinMode(4, OUTPUT);
+  digitalWrite(4, HIGH);
+  delay(300);
 
   // 3. Initialize Display UI
   ui.init();
