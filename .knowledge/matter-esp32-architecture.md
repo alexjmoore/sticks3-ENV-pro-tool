@@ -57,6 +57,7 @@ The firmware instantiates three standard Matter endpoints registered with the Ma
 ### 9. Custom Device Instance Info Provider (Vendor, Product, Hardware Version)
 - Endpoint 0 BasicInformation cluster attributes (`VendorName`, `ProductName`, `HardwareVersion`, `HardwareVersionString`, etc.) are immutable attributes in the Matter data model and return `ESP_ERR_INVALID_ARG` (error 262) if modified via `esp_matter::attribute::update()`. Only `NodeLabel` is writable at runtime.
 - To provide custom hardware and vendor branding to controllers (Google Home, Apple Home, Alexa, Home Assistant), implement a custom `chip::DeviceLayer::DeviceInstanceInfoProvider` (see `device_info_provider.h`) and register it using `chip::DeviceLayer::SetDeviceInstanceInfoProvider(&provider)`.
+- **CRITICAL INVARIANT**: Never call `chip::DeviceLayer::GetDeviceInstanceInfoProvider()` before `Matter.begin()`. CHIP asserts non-null on the global provider and immediately invokes `abort()` if queried before `ConfigurationManagerImpl::Init()` runs. Register the custom provider via `SetDeviceInstanceInfoProvider()` right after `Matter.begin()`.
 - Values provided:
   - **Vendor Name**: `"M5Stack"`
   - **Product Name**: `"StickS3-PRO-Env"`
@@ -66,6 +67,11 @@ The firmware instantiates three standard Matter endpoints registered with the Ma
   - **Product URL**: `"https://m5stack.com"`
   - **Product Label**: `"M5Stack StickS3 Environmental Monitor"`
   - **Serial Number**: `"M5S3-ENV-2026"`
+
+### 10. Thermal & Power Efficiency Architecture
+- **CPU Clock**: Downclocking ESP32-S3 from 240 MHz to 160 MHz drops core power consumption by ~40% and keeps the StickS3 case cool to the touch.
+- **Wi-Fi Modem Sleep**: `esp_wifi_set_ps(WIFI_PS_MIN_MODEM)` enables standard DTIM beacon sleep, dropping radio baseline consumption from ~140 mA to ~20–30 mA.
+- **Adaptive Polling & Heater Gating**: The BME688 micro-heater plate reaches 300–320°C. Since Matter smart home profiles only require Temperature, Humidity, and Pressure, gas heating is completely gated off during display sleep, and polling relaxes from 5s (active display) to 30s (background sleep).
 
 ## Related Concepts
 - [M5Stack StickS3 Hardware Architecture and Sensor Bus Integration](./m5sticks3-uiflow-sensors.md)
