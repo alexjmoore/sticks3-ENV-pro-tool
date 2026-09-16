@@ -40,5 +40,10 @@ The firmware instantiates three standard Matter endpoints registered with the Ma
   - **On-Device**: 10-second Button A hold on the Matter screen triggers `Matter.decommission()` and `ESP.restart()`.
   - **CLI**: `./manage-v2.sh matter-reset` wipes the NVS partition (`0x9000 0x5000`).
 
+### 6. I2C Bus Isolation Invariant
+- `M5Unified` on StickS3 attaches its internal driver to hardware controller `I2C1` (GPIO 47/48) for the BMI270 IMU and PMIC.
+- External Grove sensors (Unit ENV Pro) MUST be attached to `Wire` (hardware controller `I2C0` on GPIO 9/10).
+- Using `Wire1` (`I2C1`) in Arduino code collides directly with `M5.update()`, resulting in continuous communication failure on Grove Port A.
+
 ## Related Concepts
 - [M5Stack StickS3 Hardware Architecture and Sensor Bus Integration](./m5sticks3-uiflow-sensors.md)
