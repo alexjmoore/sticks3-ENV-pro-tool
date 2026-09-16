@@ -32,11 +32,15 @@ extern "C" bool bleInUse(void) {
 
 #include "bme688_sensor.h"
 #include "display_ui.h"
+#include "device_info_provider.h"
 
 // Matter Endpoints
 MatterTemperatureSensor matterTemp;
 MatterHumiditySensor matterHum;
 MatterPressureSensor matterPress;
+
+// Custom Device Info Provider
+static m5stack::StickS3DeviceInfoProvider deviceInfoProvider;
 
 // Hardware & UI instances
 BME688Sensor bme;
@@ -83,9 +87,15 @@ void setup() {
   matterHum.begin(50.0);
   matterPress.begin(1013.25);
 
+  // Set Custom Device Instance Info Provider (Vendor, Product, Hardware Version)
+  deviceInfoProvider.init();
+
   // 6. Initialize Matter Core Stack (Last step after all endpoints are registered)
   Serial.println("[Matter] Initializing Matter runtime...");
   Matter.begin();
+
+  // Ensure custom provider is active after stack start
+  deviceInfoProvider.init();
 
   // Set friendly Node Label in Basic Information Cluster (displayed by Google Home / Apple Home)
   esp_matter_attr_val_t nameVal = esp_matter_char_str((char*)"StickS3-PRO-Env", strlen("StickS3-PRO-Env"));

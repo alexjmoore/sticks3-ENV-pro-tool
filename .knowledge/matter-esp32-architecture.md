@@ -54,5 +54,18 @@ The firmware instantiates three standard Matter endpoints registered with the Ma
 - Because `libMatter` is linked as an archive, the linker does not invoke its constructor before `app_main()`. The main sketch must declare a strong `extern "C" bool bleInUse(void) { return true; }` and include `<esp32-hal-alloc-ble-mem.h>`.
 - Without this override, BLE memory is released on boot, causing `Matter.begin()` to silently disable BLE transport, making the device undiscoverable to Google Home and Apple Home during pairing.
 
+### 9. Custom Device Instance Info Provider (Vendor, Product, Hardware Version)
+- Endpoint 0 BasicInformation cluster attributes (`VendorName`, `ProductName`, `HardwareVersion`, `HardwareVersionString`, etc.) are immutable attributes in the Matter data model and return `ESP_ERR_INVALID_ARG` (error 262) if modified via `esp_matter::attribute::update()`. Only `NodeLabel` is writable at runtime.
+- To provide custom hardware and vendor branding to controllers (Google Home, Apple Home, Alexa, Home Assistant), implement a custom `chip::DeviceLayer::DeviceInstanceInfoProvider` (see `device_info_provider.h`) and register it using `chip::DeviceLayer::SetDeviceInstanceInfoProvider(&provider)`.
+- Values provided:
+  - **Vendor Name**: `"M5Stack"`
+  - **Product Name**: `"StickS3-PRO-Env"`
+  - **Hardware Version**: `1` (numeric)
+  - **Hardware Version String**: `"v1.0-ESP32S3"`
+  - **Part Number**: `"StickS3-BME688"`
+  - **Product URL**: `"https://m5stack.com"`
+  - **Product Label**: `"M5Stack StickS3 Environmental Monitor"`
+  - **Serial Number**: `"M5S3-ENV-2026"`
+
 ## Related Concepts
 - [M5Stack StickS3 Hardware Architecture and Sensor Bus Integration](./m5sticks3-uiflow-sensors.md)
