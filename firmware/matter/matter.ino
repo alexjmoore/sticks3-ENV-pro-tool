@@ -62,6 +62,7 @@ const unsigned long AUTO_SLEEP_TIMEOUT     = 30000;  // 30s inactivity auto-slee
 // Reset hold timer (Button B on Screen 7)
 unsigned long btnBHoldStart = 0;
 bool isHoldingReset = false;
+int lastReportedRemaining = -1;
 
 void setup() {
   // Downclock ESP32-S3 from 240 MHz to 160 MHz for power efficiency and cool operation
@@ -214,6 +215,7 @@ void loop() {
       lastActivityTime = now; // Keep display awake while holding
       if (btnBHoldStart == 0) {
         btnBHoldStart = now;
+        lastReportedRemaining = -1;
       }
       unsigned long elapsed = now - btnBHoldStart;
       if (elapsed >= 1000) { // After 1s, show 3s countdown
@@ -230,13 +232,15 @@ void loop() {
           Matter.decommission();
           delay(1000);
           ESP.restart();
-        } else {
+        } else if (remaining != lastReportedRemaining) {
+          lastReportedRemaining = remaining;
           ui.drawResetCountdown(remaining);
         }
       }
     } else {
       if (btnBHoldStart != 0) {
         btnBHoldStart = 0;
+        lastReportedRemaining = -1;
         if (isHoldingReset) {
           isHoldingReset = false;
           ui.needsFullRedraw = true;
