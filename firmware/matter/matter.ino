@@ -112,10 +112,6 @@ void setup() {
   // Enable Wi-Fi modem sleep (DTIM beacon sleep) for drastic power & heat reduction
   esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
 
-  // Set friendly Node Label in Basic Information Cluster (displayed by Google Home / Apple Home)
-  esp_matter_attr_val_t nameVal = esp_matter_char_str((char*)"StickS3-PRO-Env", strlen("StickS3-PRO-Env"));
-  esp_matter::attribute::update(0, chip::app::Clusters::BasicInformation::Id, chip::app::Clusters::BasicInformation::Attributes::NodeLabel::Id, &nameVal);
-
   // Set initial QR code and manual pairing payload for UI
   ui.qrPayload = Matter.getOnboardingQRCodeUrl();
   ui.manualCode = Matter.getManualPairingCode();
@@ -126,6 +122,12 @@ void setup() {
   Serial.printf("[Matter] BLE Memory Released: %s\n", btMemReleased(BT_MODE_BLE) ? "YES (ERROR!)" : "NO (OK)");
   Serial.printf("[Matter] Device Commissioned: %s\n", Matter.isDeviceCommissioned() ? "YES" : "NO (Advertising on BLE)");
 
+  // If already commissioned, disable BLE advertising in the Matter stack to save battery
+  if (Matter.isDeviceCommissioned()) {
+    Serial.println("[Power] Device is already commissioned. Disabling BLE advertising to save battery.");
+    chip::DeviceLayer::ConnectivityMgr().SetBLEAdvertisingEnabled(false);
+  }
+
   // Matter Event Callback
   Matter.onEvent([](matterEvent_t event, const chip::DeviceLayer::ChipDeviceEvent *deviceEvent) {
     switch (event) {
@@ -133,6 +135,8 @@ void setup() {
         Serial.println("[Matter] Commissioning Complete! Joined Matter fabric.");
         ui.matterCommissioned = true;
         ui.needsFullRedraw = true;
+        // Stop BLE advertising cleanly once commissioned
+        chip::DeviceLayer::ConnectivityMgr().SetBLEAdvertisingEnabled(false);
         break;
       case MATTER_WIFI_CONNECTIVITY_CHANGE:
         Serial.println("[Matter] Wi-Fi Connectivity Changed. Re-asserting modem sleep.");
@@ -159,8 +163,8 @@ void loop() {
   M5.update();
   unsigned long now = millis();
 
-  // --- Fast IMU Polling (100ms) & Accelerometer Auto-Orientation ---
-  if (now - lastImuPoll >= IMU_INTERVAL) {
+  // --- Fast IMU Polling (100ms) & Accelerometer Auto-Orientation (ONLY WHEN SCREEN IS ON) ---
+  if (ui.displayOn && (now - lastImuPoll >= IMU_INTERVAL)) {
     lastImuPoll = now;
     M5.Imu.getAccel(&ui.ax, &ui.ay, &ui.az);
     M5.Imu.getGyro(&ui.gx, &ui.gy, &ui.gz);
@@ -188,6 +192,7 @@ void loop() {
   // Handle Display Sleep / Wakeup
   if (!ui.displayOn) {
     if (btnAPressed || btnBPressed) {
+      setCpuFrequencyMhz(160); // Restore 160 MHz for active UI
       ui.wakeDisplay();
       lastActivityTime = now;
       delay(50);
@@ -196,6 +201,7 @@ void loop() {
     // Check Auto-Sleep (30s inactivity)
     if (now - lastActivityTime >= AUTO_SLEEP_TIMEOUT) {
       ui.sleepDisplay();
+      setCpuFrequencyMhz(80); // Drop CPU clock to 80 MHz in background sleep
     }
     // Btn A: Step through 7 views (only if not holding reset)
     else if (btnAPressed && !isHoldingReset) {
@@ -205,6 +211,7 @@ void loop() {
     // Btn B on Views 0-5: Manual toggle display sleep
     else if (btnBPressed && ui.currentView != VIEW_MATTER) {
       ui.sleepDisplay();
+      setCpuFrequencyMhz(80); // Drop CPU clock to 80 MHz in background sleep
       lastActivityTime = now;
     }
   }
@@ -289,6 +296,7 @@ void loop() {
     if (WiFi.status() == WL_CONNECTED) {
       ui.ipAddr = WiFi.localIP().toString();
       ui.wifiSSID = WiFi.SSID();
+      esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
     }
 
     // Refresh display if screen is ON and not in reset countdown
@@ -297,5 +305,5 @@ void loop() {
     }
   }
 
-  delay(20);
+  delay(ui.displayOn ? 20 : 100);
 }

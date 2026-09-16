@@ -91,11 +91,13 @@ public:
   void sleepDisplay() {
     if (!displayOn) return;
     M5.Display.setBrightness(0);
+    M5.Display.sleep();
     displayOn = false;
   }
 
   void wakeDisplay() {
     if (displayOn) return;
+    M5.Display.wakeup();
     M5.Display.setBrightness(brightness);
     displayOn = true;
     needsFullRedraw = true;
