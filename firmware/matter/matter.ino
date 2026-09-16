@@ -14,6 +14,7 @@
 
 #include <Arduino.h>
 #include <WiFi.h>
+#include <esp_wifi.h>
 #include <M5Unified.h>
 
 #include <Matter.h>
@@ -46,22 +47,32 @@ static m5stack::StickS3DeviceInfoProvider deviceInfoProvider;
 BME688Sensor bme;
 DisplayUI ui;
 
-// Timers
+// Timers & Intervals for Power Efficiency
 unsigned long lastSensorPoll = 0;
 unsigned long lastActivityTime = 0;
-const unsigned long SENSOR_INTERVAL = 2000;  // 2 seconds
-const unsigned long AUTO_SLEEP_TIMEOUT = 30000; // 30 seconds
+unsigned long lastImuPoll = 0;
+unsigned long lastGasPoll = 0;
 
-// Reset hold timer
-unsigned long btnAHoldStart = 0;
+const unsigned long SENSOR_INTERVAL_ACTIVE = 5000;   // 5s when display is ON (smooth UI)
+const unsigned long SENSOR_INTERVAL_SLEEP  = 30000;  // 30s when display is OFF (battery saver)
+const unsigned long GAS_INTERVAL           = 15000;  // 15s gas heater interval when display is ON
+const unsigned long IMU_INTERVAL           = 100;    // 100ms fast IMU polling for auto-orientation
+const unsigned long AUTO_SLEEP_TIMEOUT     = 30000;  // 30s inactivity auto-sleep
+
+// Reset hold timer (Button B on Screen 7)
+unsigned long btnBHoldStart = 0;
 bool isHoldingReset = false;
 
 void setup() {
+  // Downclock ESP32-S3 from 240 MHz to 160 MHz for power efficiency and cool operation
+  setCpuFrequencyMhz(160);
+
   Serial.begin(115200);
-  delay(500);
+  delay(300);
 
   Serial.println("\n==========================================");
   Serial.println("  M5StickS3 + ENV Pro Matter Firmware v2.0");
+  Serial.printf ("  CPU Clock: %d MHz (Low-Power Optimized)\n", getCpuFrequencyMhz());
   Serial.println("==========================================\n");
 
   // 1. Initialize M5 hardware
@@ -97,6 +108,9 @@ void setup() {
   // Ensure custom provider is active after stack start
   deviceInfoProvider.init();
 
+  // Enable Wi-Fi modem sleep (DTIM beacon sleep) for drastic power & heat reduction
+  esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
+
   // Set friendly Node Label in Basic Information Cluster (displayed by Google Home / Apple Home)
   esp_matter_attr_val_t nameVal = esp_matter_char_str((char*)"StickS3-PRO-Env", strlen("StickS3-PRO-Env"));
   esp_matter::attribute::update(0, chip::app::Clusters::BasicInformation::Id, chip::app::Clusters::BasicInformation::Attributes::NodeLabel::Id, &nameVal);
@@ -120,7 +134,8 @@ void setup() {
         ui.needsFullRedraw = true;
         break;
       case MATTER_WIFI_CONNECTIVITY_CHANGE:
-        Serial.println("[Matter] Wi-Fi Connectivity Changed.");
+        Serial.println("[Matter] Wi-Fi Connectivity Changed. Re-asserting modem sleep.");
+        esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
         break;
       case MATTER_INTERFACE_IP_ADDRESS_CHANGED:
         Serial.printf("[Matter] IP Address: %s\n", WiFi.localIP().toString().c_str());
@@ -133,7 +148,9 @@ void setup() {
   });
 
   lastActivityTime = millis();
-  lastSensorPoll = millis() - SENSOR_INTERVAL;
+  lastSensorPoll = millis() - SENSOR_INTERVAL_ACTIVE;
+  lastImuPoll = millis();
+  lastGasPoll = millis();
   ui.needsFullRedraw = true;
 }
 
@@ -141,10 +158,31 @@ void loop() {
   M5.update();
   unsigned long now = millis();
 
+  // --- Fast IMU Polling (100ms) & Accelerometer Auto-Orientation ---
+  if (now - lastImuPoll >= IMU_INTERVAL) {
+    lastImuPoll = now;
+    M5.Imu.getAccel(&ui.ax, &ui.ay, &ui.az);
+    M5.Imu.getGyro(&ui.gx, &ui.gy, &ui.gz);
+
+    // Auto-rotate between normal landscape (1) and inverted landscape (3)
+    // Deadband hysteresis: only rotate when tilted distinctly (|az| < 0.85g)
+    if (fabsf(ui.az) < 0.85f) {
+      if (ui.ax < -0.35f && ui.rotation != 1) {
+        ui.rotation = 1;
+        M5.Display.setRotation(1);
+        ui.needsFullRedraw = true;
+      } else if (ui.ax > 0.35f && ui.rotation != 3) {
+        ui.rotation = 3;
+        M5.Display.setRotation(3);
+        ui.needsFullRedraw = true;
+      }
+    }
+  }
+
   // --- Button Handling ---
-  bool btnAPressed = M5.BtnA.wasPressed();
-  bool btnBPressed = M5.BtnB.wasPressed();
-  bool btnBHold    = M5.BtnB.wasHold();
+  bool btnAPressed   = M5.BtnA.wasPressed();
+  bool btnBPressed   = M5.BtnB.wasPressed();
+  bool btnBIsPressed = M5.BtnB.isPressed();
 
   // Handle Display Sleep / Wakeup
   if (!ui.displayOn) {
@@ -158,38 +196,37 @@ void loop() {
     if (now - lastActivityTime >= AUTO_SLEEP_TIMEOUT) {
       ui.sleepDisplay();
     }
-    // Manual sleep toggle on Btn B hold
-    else if (btnBHold) {
-      ui.sleepDisplay();
-      lastActivityTime = now;
-    }
-    // Btn A: Step through 7 views
+    // Btn A: Step through 7 views (only if not holding reset)
     else if (btnAPressed && !isHoldingReset) {
       ui.stepView();
       lastActivityTime = now;
     }
-    // Btn B: Flip 180° orientation
-    else if (btnBPressed) {
-      ui.toggleRotation();
+    // Btn B on Views 0-5: Manual toggle display sleep
+    else if (btnBPressed && ui.currentView != VIEW_MATTER) {
+      ui.sleepDisplay();
       lastActivityTime = now;
     }
   }
 
-  // --- Matter Factory Reset on View 6 (Hold Btn A for 10s) ---
+  // --- Matter Factory Reset on View 6 (Hold Button B for 4s) ---
   if (ui.currentView == VIEW_MATTER && ui.displayOn) {
-    if (M5.BtnA.isPressed()) {
-      if (btnAHoldStart == 0) {
-        btnAHoldStart = now;
+    if (btnBIsPressed) {
+      lastActivityTime = now; // Keep display awake while holding
+      if (btnBHoldStart == 0) {
+        btnBHoldStart = now;
       }
-      unsigned long elapsed = now - btnAHoldStart;
-      if (elapsed >= 7000) { // Last 3 seconds show countdown
+      unsigned long elapsed = now - btnBHoldStart;
+      if (elapsed >= 1000) { // After 1s, show 3s countdown
         isHoldingReset = true;
-        int remaining = 10 - (int)(elapsed / 1000);
+        int remaining = 4 - (int)(elapsed / 1000);
         if (remaining <= 0) {
           M5.Display.fillScreen(TFT_RED);
           M5.Display.setTextColor(TFT_WHITE, TFT_RED);
-          M5.Display.drawString("RESETTING MATTER...", 30, 50);
-          Serial.println("[Matter] Factory Reset triggered by user. Decommissioning...");
+          M5.Display.setTextSize(2);
+          M5.Display.drawString("RESETTING...", 35, 40);
+          M5.Display.setTextSize(1);
+          M5.Display.drawString("Erasing Fabric & Restarting", 30, 75);
+          Serial.println("[Matter] Factory Reset triggered by Button B hold. Decommissioning...");
           Matter.decommission();
           delay(1000);
           ESP.restart();
@@ -198,8 +235,8 @@ void loop() {
         }
       }
     } else {
-      if (btnAHoldStart != 0) {
-        btnAHoldStart = 0;
+      if (btnBHoldStart != 0) {
+        btnBHoldStart = 0;
         if (isHoldingReset) {
           isHoldingReset = false;
           ui.needsFullRedraw = true;
@@ -208,25 +245,30 @@ void loop() {
     }
   }
 
-  // --- 2-Second Background Sensor & Matter Polling (ALWAYS RUNS) ---
-  if (now - lastSensorPoll >= SENSOR_INTERVAL) {
+  // --- Adaptive Background Sensor & Matter Polling (5s active / 30s sleep) ---
+  unsigned long currentInterval = ui.displayOn ? SENSOR_INTERVAL_ACTIVE : SENSOR_INTERVAL_SLEEP;
+  if (now - lastSensorPoll >= currentInterval) {
     lastSensorPoll = now;
 
-    // 1. Read IMU
-    M5.Imu.getAccel(&ui.ax, &ui.ay, &ui.az);
-    M5.Imu.getGyro(&ui.gx, &ui.gy, &ui.gz);
-
-    // 2. Read Power / Battery
+    // 1. Read Power / Battery
     ui.batLevel = M5.Power.getBatteryLevel();
     ui.vbat = M5.Power.getBatteryVoltage();
     ui.isCharging = M5.Power.isCharging();
 
+    // 2. Decide if gas sensor heater should run (only when display is ON and every 15s)
+    bool shouldReadGas = ui.displayOn && ((now - lastGasPoll) >= GAS_INTERVAL);
+    if (shouldReadGas) {
+      lastGasPoll = now;
+    }
+
     // 3. Read BME688
-    if (bme.read()) {
+    if (bme.read(shouldReadGas)) {
       ui.temp_c = bme.temperature;
       ui.humidity = bme.humidity;
       ui.pressure = bme.pressure;
-      ui.gas_res = bme.gasResistance;
+      if (shouldReadGas) {
+        ui.gas_res = bme.gasResistance;
+      }
 
       // Append to on-screen historical chart buffers
       ui.appendHistory(ui.temp_c, ui.humidity, ui.pressure, ui.gas_res);

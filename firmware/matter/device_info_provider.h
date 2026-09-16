@@ -7,10 +7,11 @@ namespace m5stack {
 
 class StickS3DeviceInfoProvider : public chip::DeviceLayer::DeviceInstanceInfoProvider {
 public:
-    StickS3DeviceInfoProvider() : mDefaultProvider(nullptr) {}
+    StickS3DeviceInfoProvider() {}
 
     void init() {
-        mDefaultProvider = chip::DeviceLayer::GetDeviceInstanceInfoProvider();
+        // Explicitly set this provider without calling GetDeviceInstanceInfoProvider()
+        // which calls abort() if invoked prior to ConfigurationManager initialization.
         chip::DeviceLayer::SetDeviceInstanceInfoProvider(this);
     }
 
@@ -20,9 +21,6 @@ public:
     }
 
     CHIP_ERROR GetVendorId(uint16_t & vendorId) override {
-        if (mDefaultProvider && mDefaultProvider->GetVendorId(vendorId) == CHIP_NO_ERROR) {
-            return CHIP_NO_ERROR;
-        }
         vendorId = 0xFFF1; // Standard test/development Vendor ID
         return CHIP_NO_ERROR;
     }
@@ -33,9 +31,6 @@ public:
     }
 
     CHIP_ERROR GetProductId(uint16_t & productId) override {
-        if (mDefaultProvider && mDefaultProvider->GetProductId(productId) == CHIP_NO_ERROR) {
-            return CHIP_NO_ERROR;
-        }
         productId = 0x8001; // Standard test/development Product ID
         return CHIP_NO_ERROR;
     }
@@ -78,28 +73,16 @@ public:
     }
 
     CHIP_ERROR GetRotatingDeviceIdUniqueId(chip::MutableByteSpan & uniqueIdSpan) override {
-        if (mDefaultProvider) {
-            return mDefaultProvider->GetRotatingDeviceIdUniqueId(uniqueIdSpan);
-        }
         return CHIP_ERROR_NOT_IMPLEMENTED;
     }
 
     CHIP_ERROR GetProductFinish(chip::app::Clusters::BasicInformation::ProductFinishEnum * finish) override {
-        if (mDefaultProvider) {
-            return mDefaultProvider->GetProductFinish(finish);
-        }
         return CHIP_ERROR_NOT_IMPLEMENTED;
     }
 
     CHIP_ERROR GetProductPrimaryColor(chip::app::Clusters::BasicInformation::ColorEnum * primaryColor) override {
-        if (mDefaultProvider) {
-            return mDefaultProvider->GetProductPrimaryColor(primaryColor);
-        }
         return CHIP_ERROR_NOT_IMPLEMENTED;
     }
-
-private:
-    chip::DeviceLayer::DeviceInstanceInfoProvider *mDefaultProvider;
 };
 
 } // namespace m5stack

@@ -21,7 +21,7 @@ public:
   int rotation = 1;
   bool displayOn = true;
   bool needsFullRedraw = true;
-  uint8_t brightness = 128;
+  uint8_t brightness = 90;
 
   // Sensor cached data
   float ax = 0, ay = 0, az = 0;
@@ -342,7 +342,7 @@ public:
     }
 
     M5.Display.setTextColor(0x6B4D, TFT_BLACK);
-    M5.Display.drawString("Hold BtnA 10s: Reset", tx, 106);
+    M5.Display.drawString("Hold Btn B 4s: Reset", tx, 106);
   }
 
   void drawResetCountdown(int secondsRemaining) {
@@ -354,7 +354,7 @@ public:
     char buf[40];
     snprintf(buf, sizeof(buf), "Resetting Matter in %d...", secondsRemaining);
     M5.Display.drawString(buf, 40, 70);
-    M5.Display.drawString("Release button to cancel", 35, 95);
+    M5.Display.drawString("Release Btn B to cancel", 35, 95);
   }
 
   void updateDisplay() {

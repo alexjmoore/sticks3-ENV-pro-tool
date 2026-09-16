@@ -55,24 +55,30 @@ public:
       return false;
     }
 
-    // 5. Configure oversampling, filter, and gas heater
+    // 5. Configure oversampling and filter (gas heater configured per-reading)
     bme.setTemperatureOversampling(BME680_OS_8X);
     bme.setHumidityOversampling(BME680_OS_2X);
     bme.setPressureOversampling(BME680_OS_4X);
     bme.setIIRFilterSize(BME680_FILTER_SIZE_3);
-    bme.setGasHeater(320, 150); // 320°C for 150 ms
+    bme.setGasHeater(0, 0); // Default off to save power
 
     connected = true;
     Serial.printf("[BME688] Initialized successfully on Grove Port A at 0x%02X\n", i2c_addr);
     return true;
   }
 
-  bool read() {
+  bool read(bool includeGas = true) {
     if (!connected) {
       // Auto-retry connection
       if (!begin()) {
         return false;
       }
+    }
+
+    if (includeGas) {
+      bme.setGasHeater(300, 80); // 300°C for 80 ms (low-power target)
+    } else {
+      bme.setGasHeater(0, 0);    // Heater off: ultra-fast, low-power T/H/P read (~10ms)
     }
 
     if (!bme.performReading()) {
@@ -83,8 +89,10 @@ public:
 
     temperature = bme.temperature;
     humidity = bme.humidity;
-    pressure = bme.pressure / 100.0f;             // Pa to hPa
-    gasResistance = bme.gas_resistance / 1000.0f; // Ohms to kOhms
+    pressure = bme.pressure / 100.0f; // Pa to hPa
+    if (includeGas && bme.gas_resistance > 0) {
+      gasResistance = bme.gas_resistance / 1000.0f; // Ohms to kOhms
+    }
     return true;
   }
 };
