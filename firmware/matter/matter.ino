@@ -21,6 +21,14 @@
 #include <MatterEndpoints/MatterHumiditySensor.h>
 #include <MatterEndpoints/MatterPressureSensor.h>
 
+// CRITICAL: Prevent Arduino core from releasing Bluetooth LE memory on boot
+#include <esp32-hal-alloc-ble-mem.h>
+#include <esp32-hal-bt.h>
+
+extern "C" bool bleInUse(void) {
+  return true;
+}
+
 #include "bme688_sensor.h"
 #include "display_ui.h"
 
@@ -84,6 +92,9 @@ void setup() {
 
   Serial.printf("[Matter] Manual Pairing Code: %s\n", ui.manualCode.c_str());
   Serial.printf("[Matter] Onboarding QR URL: %s\n", ui.qrPayload.c_str());
+  Serial.printf("[Matter] BLE Commissioning Enabled: %s\n", Matter.isBLECommissioningEnabled() ? "YES" : "NO");
+  Serial.printf("[Matter] BLE Memory Released: %s\n", btMemReleased(BT_MODE_BLE) ? "YES (ERROR!)" : "NO (OK)");
+  Serial.printf("[Matter] Device Commissioned: %s\n", Matter.isDeviceCommissioned() ? "YES" : "NO (Advertising on BLE)");
 
   // Matter Event Callback
   Matter.onEvent([](matterEvent_t event, const chip::DeviceLayer::ChipDeviceEvent *deviceEvent) {

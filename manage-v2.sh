@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
 CLI="$SCRIPT_DIR/bin/arduino-cli"
-BOARD_FQBN="esp32:esp32:esp32s3:CDCOnBoot=cdc,FlashSize=8M,PartitionScheme=huge_app,PSRAM=opi"
+BOARD_FQBN="esp32:esp32:esp32s3:CDCOnBoot=cdc,FlashSize=8M,PartitionScheme=huge_app,PSRAM=opi,DebugLevel=info"
 SKETCH_DIR="$SCRIPT_DIR/firmware/matter"
 
 # Auto-detect serial port
