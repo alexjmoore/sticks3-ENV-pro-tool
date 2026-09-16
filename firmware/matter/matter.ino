@@ -65,26 +65,31 @@ bool isHoldingReset = false;
 int lastReportedRemaining = -1;
 
 void setup() {
-  // Downclock ESP32-S3 from 240 MHz to 160 MHz for power efficiency and cool operation
-  setCpuFrequencyMhz(160);
+  // Downclock ESP32-S3 from 240 MHz to 80 MHz for power efficiency and cool operation
+  setCpuFrequencyMhz(80);
 
   Serial.begin(115200);
   delay(300);
 
   Serial.println("\n==========================================");
   Serial.println("  M5StickS3 + ENV Pro Matter Firmware v2.0");
-  Serial.printf ("  CPU Clock: %d MHz (Low-Power Optimized)\n", getCpuFrequencyMhz());
+  Serial.printf ("  CPU Clock: %d MHz (Ultra Low-Power & Cool)\n", getCpuFrequencyMhz());
   Serial.println("==========================================\n");
 
-  // 1. Initialize M5 hardware
+  // 1. Initialize M5 hardware with unused high-power peripherals disabled
   auto cfg = M5.config();
+  cfg.internal_spk = false; // Disable ES8311 audio DAC & speaker amplifier (eliminates continuous idle heat)
+  cfg.internal_mic = false; // Disable microphone I2S peripheral
+  cfg.output_power = true;  // Power Grove port 5V via M5PM1 PMIC
   M5.begin(cfg);
 
-  // 2. Power on Grove 5V boost converter (AW35122 on GPIO 4 & M5pm1)
+  // Ensure audio speaker/mic peripherals and analog amplifiers are dormant
+  M5.Speaker.end();
+  M5.Mic.end();
+
+  // 2. Power on Grove 5V boost converter via M5PM1 PMIC
   M5.Power.setExtOutput(true);
-  pinMode(4, OUTPUT);
-  digitalWrite(4, HIGH);
-  delay(300);
+  delay(100);
 
   // 3. Initialize Display UI
   ui.init();
@@ -109,8 +114,11 @@ void setup() {
   // Ensure custom provider is active after stack start
   deviceInfoProvider.init();
 
-  // Enable Wi-Fi modem sleep (DTIM beacon sleep) for drastic power & heat reduction
-  esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
+  // Configure Wi-Fi RF power and modem sleep:
+  // - Reduce TX power to 13 dBm (drastically lowers peak TX current from 350mA to ~140mA)
+  // - MAX modem sleep enables deep radio sleep across DTIM intervals
+  WiFi.setTxPower(WIFI_POWER_13dBm);
+  esp_wifi_set_ps(WIFI_PS_MAX_MODEM);
 
   // Set initial QR code and manual pairing payload for UI
   ui.qrPayload = Matter.getOnboardingQRCodeUrl();
@@ -139,8 +147,9 @@ void setup() {
         chip::DeviceLayer::ConnectivityMgr().SetBLEAdvertisingEnabled(false);
         break;
       case MATTER_WIFI_CONNECTIVITY_CHANGE:
-        Serial.println("[Matter] Wi-Fi Connectivity Changed. Re-asserting modem sleep.");
-        esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
+        Serial.println("[Matter] Wi-Fi Connectivity Changed. Re-applying low-power RF settings.");
+        WiFi.setTxPower(WIFI_POWER_13dBm);
+        esp_wifi_set_ps(WIFI_PS_MAX_MODEM);
         break;
       case MATTER_INTERFACE_IP_ADDRESS_CHANGED:
         Serial.printf("[Matter] IP Address: %s\n", WiFi.localIP().toString().c_str());
@@ -192,7 +201,6 @@ void loop() {
   // Handle Display Sleep / Wakeup
   if (!ui.displayOn) {
     if (btnAPressed || btnBPressed) {
-      setCpuFrequencyMhz(160); // Restore 160 MHz for active UI
       ui.wakeDisplay();
       lastActivityTime = now;
       delay(50);
@@ -201,7 +209,6 @@ void loop() {
     // Check Auto-Sleep (30s inactivity)
     if (now - lastActivityTime >= AUTO_SLEEP_TIMEOUT) {
       ui.sleepDisplay();
-      setCpuFrequencyMhz(80); // Drop CPU clock to 80 MHz in background sleep
     }
     // Btn A: Step through 7 views (only if not holding reset)
     else if (btnAPressed && !isHoldingReset) {
@@ -211,7 +218,6 @@ void loop() {
     // Btn B on Views 0-5: Manual toggle display sleep
     else if (btnBPressed && ui.currentView != VIEW_MATTER) {
       ui.sleepDisplay();
-      setCpuFrequencyMhz(80); // Drop CPU clock to 80 MHz in background sleep
       lastActivityTime = now;
     }
   }
@@ -296,7 +302,7 @@ void loop() {
     if (WiFi.status() == WL_CONNECTED) {
       ui.ipAddr = WiFi.localIP().toString();
       ui.wifiSSID = WiFi.SSID();
-      esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
+      esp_wifi_set_ps(WIFI_PS_MAX_MODEM);
     }
 
     // Refresh display if screen is ON and not in reset countdown

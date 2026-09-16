@@ -151,10 +151,11 @@ public:
       M5.Display.drawCircle(193, 53, 6, 0x4208);
       M5.Display.drawPixel(193, 53, TFT_WHITE);
 
-      M5.Display.drawRoundRect(150, 82, 86, 37, 4, 0x4A49);
+      M5.Display.drawRoundRect(150, 80, 86, 39, 4, 0x4A49);
       M5.Display.setTextColor(0x9492, TFT_BLACK);
-      M5.Display.drawString("VBat:", 156, 88);
-      M5.Display.drawString("State:", 156, 102);
+      M5.Display.drawString("VBat:", 154, 84);
+      M5.Display.drawString("State:", 154, 95);
+      M5.Display.drawString("Die:", 154, 106);
 
       needsFullRedraw = false;
     }
@@ -182,9 +183,12 @@ public:
     M5.Display.fillCircle(bx, by, 3, bcol);
 
     snprintf(buf, sizeof(buf), "%dmV ", vbat);
-    M5.Display.drawString(buf, 192, 88);
+    M5.Display.drawString(buf, 192, 84);
     M5.Display.setTextColor(isCharging ? TFT_GREEN : TFT_ORANGE, TFT_BLACK);
-    M5.Display.drawString(isCharging ? "CHARGING" : "BATTERY ", 192, 102);
+    M5.Display.drawString(isCharging ? "CHG " : "BAT ", 192, 95);
+    M5.Display.setTextColor(TFT_CYAN, TFT_BLACK);
+    snprintf(buf, sizeof(buf), "%4.1fC ", temperatureRead());
+    M5.Display.drawString(buf, 192, 106);
   }
 
   // View 1: ENV Pro Overview
