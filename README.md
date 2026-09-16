@@ -52,6 +52,13 @@ Version 2.0 transforms your M5StickS3 + Unit ENV Pro into a certified-compliant 
 - **Relative Humidity Sensor (`0x0405`)**: 0 to 100 %RH measurement.
 - **Pressure Sensor (`0x0403`)**: Barometric pressure reporting in hPa.
 - **BLE Commissioning**: Standard Matter Bluetooth Low Energy onboarding with Apple/Google/Home Assistant apps.
+- **Custom Device Branding & Identity**: Exposes official M5Stack identity to controllers:
+  - Manufacturer: `M5Stack`
+  - Model: `StickS3-PRO-Env`
+  - Hardware Version: `v1.0-ESP32S3` (version 1)
+  - Part Number: `StickS3-BME688`
+  - Serial Number: `M5S3-ENV-2026`
+  - Product URL: `https://m5stack.com`
 - **On-Screen Commissioning QR Code**: The 7th display carousel view renders the official Matter QR code directly on the StickS3 LCD screen for instant camera scanning.
 - **Manual Pairing Code**: Displays standard Matter pairing code `3497-011-2332`.
 - **Dual Factory Reset**:
