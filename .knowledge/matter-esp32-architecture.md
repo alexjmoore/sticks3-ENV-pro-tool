@@ -49,5 +49,10 @@ The firmware instantiates three standard Matter endpoints registered with the Ma
 - Matter endpoint instances (`matterTemp`, `matterHum`, `matterPress`) MUST call `.begin()` **prior to** calling `Matter.begin()`.
 - `Matter.begin()` builds the Matter data model and registers endpoint cluster attributes. Calling `endpoint.begin()` after `Matter.begin()` attempts to dereference unlinked attribute tables, triggering a panic (`LoadProhibited` / EXCVADDR `0x00000000`).
 
+### 8. Bluetooth LE Memory Retention Invariant
+- By default, `initArduino()` releases Bluetooth controller memory (`esp_bt_controller_mem_release(ESP_BT_MODE_BLE)`) unless `bleInUse()` returns true.
+- Because `libMatter` is linked as an archive, the linker does not invoke its constructor before `app_main()`. The main sketch must declare a strong `extern "C" bool bleInUse(void) { return true; }` and include `<esp32-hal-alloc-ble-mem.h>`.
+- Without this override, BLE memory is released on boot, causing `Matter.begin()` to silently disable BLE transport, making the device undiscoverable to Google Home and Apple Home during pairing.
+
 ## Related Concepts
 - [M5Stack StickS3 Hardware Architecture and Sensor Bus Integration](./m5sticks3-uiflow-sensors.md)
