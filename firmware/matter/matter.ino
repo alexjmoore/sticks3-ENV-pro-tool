@@ -17,6 +17,7 @@
 #include <M5Unified.h>
 
 #include <Matter.h>
+#include <esp_matter.h>
 #include <MatterEndpoints/MatterTemperatureSensor.h>
 #include <MatterEndpoints/MatterHumiditySensor.h>
 #include <MatterEndpoints/MatterPressureSensor.h>
@@ -85,6 +86,10 @@ void setup() {
   // 6. Initialize Matter Core Stack (Last step after all endpoints are registered)
   Serial.println("[Matter] Initializing Matter runtime...");
   Matter.begin();
+
+  // Set friendly Node Label in Basic Information Cluster (displayed by Google Home / Apple Home)
+  esp_matter_attr_val_t nameVal = esp_matter_char_str((char*)"StickS3-PRO-Env", strlen("StickS3-PRO-Env"));
+  esp_matter::attribute::update(0, chip::app::Clusters::BasicInformation::Id, chip::app::Clusters::BasicInformation::Attributes::NodeLabel::Id, &nameVal);
 
   // Set initial QR code and manual pairing payload for UI
   ui.qrPayload = Matter.getOnboardingQRCodeUrl();
