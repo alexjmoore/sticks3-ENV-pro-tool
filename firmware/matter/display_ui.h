@@ -23,7 +23,7 @@ public:
   int rotation = 1;
   bool displayOn = true;
   bool needsFullRedraw = true;
-  uint8_t brightness = 90;
+  uint8_t brightness = 60;
 
   // Sensor cached data
   float ax = 0, ay = 0, az = 0;

@@ -55,10 +55,15 @@ unsigned long lastImuPoll = 0;
 unsigned long lastGasPoll = 0;
 
 const unsigned long SENSOR_INTERVAL_ACTIVE = 5000;   // 5s when display is ON (smooth UI)
-const unsigned long SENSOR_INTERVAL_SLEEP  = 30000;  // 30s when display is OFF (battery saver)
+const unsigned long SENSOR_INTERVAL_SLEEP  = 60000;  // 60s when display is OFF (battery saver)
 const unsigned long GAS_INTERVAL           = 15000;  // 15s gas heater interval when display is ON
 const unsigned long IMU_INTERVAL           = 100;    // 100ms fast IMU polling for auto-orientation
-const unsigned long AUTO_SLEEP_TIMEOUT     = 30000;  // 30s inactivity auto-sleep
+const unsigned long AUTO_SLEEP_TIMEOUT     = 15000;  // 15s fast auto-sleep
+
+// Delta-threshold tracking to eliminate redundant Matter RF packets
+static float lastReportedTemp = -999.0f;
+static float lastReportedHum = -999.0f;
+static float lastReportedPress = -999.0f;
 
 // Reset hold timer (Button B on Screen 7)
 unsigned long btnBHoldStart = 0;
@@ -154,12 +159,30 @@ void setup() {
         if (WiFi.status() == WL_CONNECTED) {
           WiFi.setTxPower(WIFI_POWER_13dBm);
           esp_wifi_set_ps(WIFI_PS_MAX_MODEM);
+          wifi_config_t conf;
+          if (esp_wifi_get_config(WIFI_IF_STA, &conf) == ESP_OK) {
+            if (conf.sta.listen_interval != 10) {
+              conf.sta.listen_interval = 10;
+              esp_wifi_set_config(WIFI_IF_STA, &conf);
+            }
+          }
         }
         break;
       case MATTER_INTERFACE_IP_ADDRESS_CHANGED:
         Serial.printf("[Matter] IP Address: %s\n", WiFi.localIP().toString().c_str());
         ui.ipAddr = WiFi.localIP().toString();
         ui.needsFullRedraw = true;
+        if (WiFi.status() == WL_CONNECTED) {
+          WiFi.setTxPower(WIFI_POWER_13dBm);
+          esp_wifi_set_ps(WIFI_PS_MAX_MODEM);
+          wifi_config_t conf;
+          if (esp_wifi_get_config(WIFI_IF_STA, &conf) == ESP_OK) {
+            if (conf.sta.listen_interval != 10) {
+              conf.sta.listen_interval = 10;
+              esp_wifi_set_config(WIFI_IF_STA, &conf);
+            }
+          }
+        }
         break;
       default:
         break;
@@ -292,11 +315,20 @@ void loop() {
         ui.gas_res = bme.gasResistance;
       }
 
-      // 4. Update Matter Endpoints (only when device is commissioned to a fabric)
+      // 4. Update Matter Endpoints (only when changed beyond deadband to save RF traffic)
       if (Matter.isDeviceCommissioned()) {
-        matterTemp.setTemperature(ui.temp_c);
-        matterHum.setHumidity(ui.humidity);
-        matterPress.setPressure(ui.pressure);
+        if (fabsf(ui.temp_c - lastReportedTemp) >= 0.1f) {
+          matterTemp.setTemperature(ui.temp_c);
+          lastReportedTemp = ui.temp_c;
+        }
+        if (fabsf(ui.humidity - lastReportedHum) >= 0.5f) {
+          matterHum.setHumidity(ui.humidity);
+          lastReportedHum = ui.humidity;
+        }
+        if (fabsf(ui.pressure - lastReportedPress) >= 0.5f) {
+          matterPress.setPressure(ui.pressure);
+          lastReportedPress = ui.pressure;
+        }
       }
     }
 
@@ -308,14 +340,14 @@ void loop() {
       // Base ESP32-S3 (80 MHz) + M5PM1 PMIC + BMI270 IMU: ~22 mA
       float current_mA = 22.0f;
 
-      // ST7789 display controller + backlight (brightness 90): ~26 mA
+      // ST7789 display controller + backlight (brightness 60): ~17 mA
       if (ui.displayOn) {
-        current_mA += 26.0f;
+        current_mA += 17.0f;
       }
 
-      // Wi-Fi subsystem:
+      // Wi-Fi subsystem (listen_interval = 10 + MAX modem sleep):
       if (WiFi.status() == WL_CONNECTED) {
-        current_mA += 15.0f; // DTIM beacon listening with MAX modem sleep
+        current_mA += 8.0f; // Multi-beacon listening with MAX modem sleep
       } else if (Matter.isDeviceCommissioned()) {
         current_mA += 60.0f; // Wi-Fi reconnect / scan active
       } else {
@@ -324,7 +356,7 @@ void loop() {
 
       // BME688 gas sensor heater pulse:
       if (shouldReadGas) {
-        current_mA += 2.0f; // 15 mA for 80 ms averaged over polling interval
+        current_mA += 1.0f; // 15 mA for 80 ms averaged over 60s polling interval
       }
 
       // Power (mW) = Voltage (V) * Current (mA)
@@ -340,7 +372,15 @@ void loop() {
     if (WiFi.status() == WL_CONNECTED) {
       ui.ipAddr = WiFi.localIP().toString();
       ui.wifiSSID = WiFi.SSID();
+      WiFi.setTxPower(WIFI_POWER_13dBm);
       esp_wifi_set_ps(WIFI_PS_MAX_MODEM);
+      wifi_config_t conf;
+      if (esp_wifi_get_config(WIFI_IF_STA, &conf) == ESP_OK) {
+        if (conf.sta.listen_interval != 10) {
+          conf.sta.listen_interval = 10;
+          esp_wifi_set_config(WIFI_IF_STA, &conf);
+        }
+      }
     }
 
     // Refresh display if screen is ON and not in reset countdown
