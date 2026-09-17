@@ -26,9 +26,14 @@ The M5StickS3 incorporates an ESP32-S3 dual-core MCU, M5PM1 PMIC, ES8311 audio c
 3. **CPU Clocking**:
    - Running at 80 MHz (`setCpuFrequencyMhz(80)`) satisfies the 80 MHz APB requirement for Wi-Fi and Bluetooth while cutting dynamic dissipation in half compared to 160/240 MHz.
 
-4. **Wi-Fi RF Power and Modem Sleep**:
+4. **Wi-Fi RF Power, Modem Sleep & Listen Interval**:
    - Default Wi-Fi TX power is 20 dBm (100 mW RF, ~350 mA peak). Setting `WiFi.setTxPower(WIFI_POWER_13dBm)` reduces peak transmission draw to ~140 mA without compromising indoor range.
    - Use `esp_wifi_set_ps(WIFI_PS_MAX_MODEM)` to enable multi-DTIM beacon sleep.
+   - Configure `conf.sta.listen_interval = 10` in station mode to wake for AP beacons once every 10 beacon frames (~1s), reducing background Wi-Fi current by ~40%.
+
+5. **Sleep Polling & Delta-Threshold Reporting**:
+   - Polling indoor environmental sensors (BME688) every 60s during screen sleep cuts FreeRTOS task wakeups, I2C bus current, and Matter reporting overhead by half compared to 30s.
+   - Only transmit Matter attribute updates when values exceed deadbands ($|\Delta T| \ge 0.1^\circ\text{C}$, $|\Delta H| \ge 0.5\%$, $|\Delta P| \ge 0.5\text{ hPa}$) to prevent redundant RF transmissions.
 
 ## Related Concepts
 - [M5Stack StickS3 Hardware Architecture and Sensor Bus Integration](./m5sticks3-uiflow-sensors.md)
