@@ -3,7 +3,7 @@
 
 
 #define MAX_HISTORY 120
-#define NUM_VIEWS 7
+#define NUM_VIEWS 9
 
 enum ViewType {
   VIEW_STICKS3 = 0,
@@ -12,7 +12,9 @@ enum ViewType {
   VIEW_HUM_CHART = 3,
   VIEW_PRESS_CHART = 4,
   VIEW_GAS_CHART = 5,
-  VIEW_MATTER = 6
+  VIEW_BAT_CHART = 6,
+  VIEW_POWER_CHART = 7,
+  VIEW_MATTER = 8
 };
 
 class DisplayUI {
@@ -40,6 +42,8 @@ public:
   float histHum[MAX_HISTORY];
   float histPress[MAX_HISTORY];
   float histGas[MAX_HISTORY];
+  float histBat[MAX_HISTORY];
+  float histPower[MAX_HISTORY];
   int histCount = 0;
 
   // Matter state
@@ -56,12 +60,14 @@ public:
     M5.Display.fillScreen(TFT_BLACK);
   }
 
-  void appendHistory(float t, float h, float p, float g) {
+  void appendHistory(float t, float h, float p, float g, float bat, float pwr) {
     if (histCount < MAX_HISTORY) {
       histTemp[histCount] = t;
       histHum[histCount] = h;
       histPress[histCount] = p;
       histGas[histCount] = g;
+      histBat[histCount] = bat;
+      histPower[histCount] = pwr;
       histCount++;
     } else {
       for (int i = 0; i < MAX_HISTORY - 1; i++) {
@@ -69,11 +75,15 @@ public:
         histHum[i] = histHum[i + 1];
         histPress[i] = histPress[i + 1];
         histGas[i] = histGas[i + 1];
+        histBat[i] = histBat[i + 1];
+        histPower[i] = histPower[i + 1];
       }
       histTemp[MAX_HISTORY - 1] = t;
       histHum[MAX_HISTORY - 1] = h;
       histPress[MAX_HISTORY - 1] = p;
       histGas[MAX_HISTORY - 1] = g;
+      histBat[MAX_HISTORY - 1] = bat;
+      histPower[MAX_HISTORY - 1] = pwr;
     }
   }
 
@@ -268,16 +278,35 @@ public:
       vMax = mid + (minSpan / 2.0f);
     }
 
-    char buf[32];
+    if (viewIdx == VIEW_BAT_CHART) {
+      if (vMax > 100.0f) vMax = 100.0f;
+      if (vMin < 0.0f) vMin = 0.0f;
+    } else if (viewIdx == VIEW_POWER_CHART) {
+      if (vMin < 0.0f) vMin = 0.0f;
+    }
+
+    char buf[36];
     M5.Display.setTextSize(1);
     M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
-    snprintf(buf, sizeof(buf), "Now:%5.1f Min:%5.1f Max:%5.1f", curVal, vMin, vMax);
+    if (viewIdx == VIEW_BAT_CHART) {
+      snprintf(buf, sizeof(buf), "Now:%3.0f%% (%dmV) Min:%3.0f%%", curVal, vbat, vMin);
+    } else if (viewIdx == VIEW_POWER_CHART) {
+      snprintf(buf, sizeof(buf), "Now:%3.0fmW (%dmV) Min:%3.0f", curVal, vbat, vMin);
+    } else {
+      snprintf(buf, sizeof(buf), "Now:%5.1f Min:%5.1f Max:%5.1f", curVal, vMin, vMax);
+    }
     M5.Display.drawString(buf, gx + 4, gy + 4);
 
     M5.Display.setTextColor(0x9492, TFT_BLACK);
-    snprintf(buf, sizeof(buf), "%5.1f", vMax); M5.Display.drawString(buf, 2, gy + 4);
-    snprintf(buf, sizeof(buf), "%5.1f", (vMax + vMin) / 2.0f); M5.Display.drawString(buf, 2, gy + (gh / 2) - 3);
-    snprintf(buf, sizeof(buf), "%5.1f", vMin); M5.Display.drawString(buf, 2, gy + gh - 9);
+    if (viewIdx == VIEW_BAT_CHART || viewIdx == VIEW_POWER_CHART) {
+      snprintf(buf, sizeof(buf), "%5.0f", vMax); M5.Display.drawString(buf, 2, gy + 4);
+      snprintf(buf, sizeof(buf), "%5.0f", (vMax + vMin) / 2.0f); M5.Display.drawString(buf, 2, gy + (gh / 2) - 3);
+      snprintf(buf, sizeof(buf), "%5.0f", vMin); M5.Display.drawString(buf, 2, gy + gh - 9);
+    } else {
+      snprintf(buf, sizeof(buf), "%5.1f", vMax); M5.Display.drawString(buf, 2, gy + 4);
+      snprintf(buf, sizeof(buf), "%5.1f", (vMax + vMin) / 2.0f); M5.Display.drawString(buf, 2, gy + (gh / 2) - 3);
+      snprintf(buf, sizeof(buf), "%5.1f", vMin); M5.Display.drawString(buf, 2, gy + gh - 9);
+    }
 
     M5.Display.drawLine(gx + 1, gy + (gh / 2), gx + gw - 2, gy + (gh / 2), 0x18C3);
 
@@ -305,7 +334,7 @@ public:
     }
   }
 
-  // View 6: Matter Status & Commissioning QR Code
+  // View 8: Matter Status & Commissioning QR Code
   void drawMatterScreen() {
     M5.Display.fillScreen(TFT_BLACK);
     drawHeader("MATTER STATUS", TFT_YELLOW);
@@ -387,6 +416,14 @@ public:
         break;
       case VIEW_GAS_CHART:
         drawChart("GAS RESIST", "kΩ", TFT_MAGENTA, histGas, VIEW_GAS_CHART, 1.0f);
+        needsFullRedraw = false;
+        break;
+      case VIEW_BAT_CHART:
+        drawChart("BATTERY LEVEL", "%", TFT_YELLOW, histBat, VIEW_BAT_CHART, 5.0f);
+        needsFullRedraw = false;
+        break;
+      case VIEW_POWER_CHART:
+        drawChart("POWER DRAW", "mW", 0xFD20, histPower, VIEW_POWER_CHART, 30.0f);
         needsFullRedraw = false;
         break;
       case VIEW_MATTER:

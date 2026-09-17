@@ -210,19 +210,19 @@ void loop() {
     if (now - lastActivityTime >= AUTO_SLEEP_TIMEOUT) {
       ui.sleepDisplay();
     }
-    // Btn A: Step through 7 views (only if not holding reset)
+    // Btn A: Step through 9 views (only if not holding reset)
     else if (btnAPressed && !isHoldingReset) {
       ui.stepView();
       lastActivityTime = now;
     }
-    // Btn B on Views 0-5: Manual toggle display sleep
+    // Btn B on Views 0-7: Manual toggle display sleep
     else if (btnBPressed && ui.currentView != VIEW_MATTER) {
       ui.sleepDisplay();
       lastActivityTime = now;
     }
   }
 
-  // --- Matter Factory Reset on View 6 (Hold Button B for 4s) ---
+  // --- Matter Factory Reset on View 8 (Hold Button B for 4s) ---
   if (ui.currentView == VIEW_MATTER && ui.displayOn) {
     if (btnBIsPressed) {
       lastActivityTime = now; // Keep display awake while holding
@@ -287,14 +287,45 @@ void loop() {
         ui.gas_res = bme.gasResistance;
       }
 
-      // Append to on-screen historical chart buffers
-      ui.appendHistory(ui.temp_c, ui.humidity, ui.pressure, ui.gas_res);
-
       // 4. Update Matter Endpoints
       matterTemp.setTemperature(ui.temp_c);
       matterHum.setHumidity(ui.humidity);
       matterPress.setPressure(ui.pressure);
     }
+
+    // 5. Estimate instantaneous power draw in mW
+    float powerDraw = 0.0f;
+    if (ui.isCharging) {
+      powerDraw = 0.0f; // USB powered / battery charging
+    } else {
+      // Base ESP32-S3 (80 MHz) + M5PM1 PMIC + BMI270 IMU: ~22 mA
+      float current_mA = 22.0f;
+
+      // ST7789 display controller + backlight (brightness 90): ~26 mA
+      if (ui.displayOn) {
+        current_mA += 26.0f;
+      }
+
+      // Wi-Fi subsystem:
+      if (WiFi.status() == WL_CONNECTED) {
+        current_mA += 15.0f; // DTIM beacon listening with MAX modem sleep
+      } else if (Matter.isDeviceCommissioned()) {
+        current_mA += 60.0f; // Wi-Fi reconnect / scan active
+      } else {
+        current_mA += 30.0f; // BLE advertising for commissioning
+      }
+
+      // BME688 gas sensor heater pulse:
+      if (shouldReadGas) {
+        current_mA += 2.0f; // 15 mA for 80 ms averaged over polling interval
+      }
+
+      // Power (mW) = Voltage (V) * Current (mA)
+      powerDraw = (ui.vbat / 1000.0f) * current_mA;
+    }
+
+    // Append to on-screen historical chart buffers (all 6 metrics)
+    ui.appendHistory(ui.temp_c, ui.humidity, ui.pressure, ui.gas_res, (float)ui.batLevel, powerDraw);
 
     // Update Matter & Wi-Fi status
     ui.matterCommissioned = Matter.isDeviceCommissioned();
