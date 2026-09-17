@@ -15,6 +15,7 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <esp_wifi.h>
+#include <nvs_flash.h>
 #include <M5Unified.h>
 
 #include <Matter.h>
@@ -76,6 +77,14 @@ void setup() {
   Serial.printf ("  CPU Clock: %d MHz (Ultra Low-Power & Cool)\n", getCpuFrequencyMhz());
   Serial.println("==========================================\n");
 
+  // Resilient NVS initialization: auto-recover if partition is corrupted or full
+  esp_err_t nvs_err = nvs_flash_init();
+  if (nvs_err == ESP_ERR_NVS_NO_FREE_PAGES || nvs_err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+    Serial.println("[NVS] Fragmented/full partition detected. Re-formatting NVS...");
+    nvs_flash_erase();
+    nvs_flash_init();
+  }
+
   // 1. Initialize M5 hardware with unused high-power peripherals disabled
   auto cfg = M5.config();
   cfg.internal_spk = false; // Disable ES8311 audio DAC & speaker amplifier (eliminates continuous idle heat)
@@ -114,12 +123,6 @@ void setup() {
   // Ensure custom provider is active after stack start
   deviceInfoProvider.init();
 
-  // Configure Wi-Fi RF power and modem sleep:
-  // - Reduce TX power to 13 dBm (drastically lowers peak TX current from 350mA to ~140mA)
-  // - MAX modem sleep enables deep radio sleep across DTIM intervals
-  WiFi.setTxPower(WIFI_POWER_13dBm);
-  esp_wifi_set_ps(WIFI_PS_MAX_MODEM);
-
   // Set initial QR code and manual pairing payload for UI
   ui.qrPayload = Matter.getOnboardingQRCodeUrl();
   ui.manualCode = Matter.getManualPairingCode();
@@ -147,9 +150,11 @@ void setup() {
         chip::DeviceLayer::ConnectivityMgr().SetBLEAdvertisingEnabled(false);
         break;
       case MATTER_WIFI_CONNECTIVITY_CHANGE:
-        Serial.println("[Matter] Wi-Fi Connectivity Changed. Re-applying low-power RF settings.");
-        WiFi.setTxPower(WIFI_POWER_13dBm);
-        esp_wifi_set_ps(WIFI_PS_MAX_MODEM);
+        Serial.println("[Matter] Wi-Fi Connectivity Changed.");
+        if (WiFi.status() == WL_CONNECTED) {
+          WiFi.setTxPower(WIFI_POWER_13dBm);
+          esp_wifi_set_ps(WIFI_PS_MAX_MODEM);
+        }
         break;
       case MATTER_INTERFACE_IP_ADDRESS_CHANGED:
         Serial.printf("[Matter] IP Address: %s\n", WiFi.localIP().toString().c_str());
@@ -287,10 +292,12 @@ void loop() {
         ui.gas_res = bme.gasResistance;
       }
 
-      // 4. Update Matter Endpoints
-      matterTemp.setTemperature(ui.temp_c);
-      matterHum.setHumidity(ui.humidity);
-      matterPress.setPressure(ui.pressure);
+      // 4. Update Matter Endpoints (only when device is commissioned to a fabric)
+      if (Matter.isDeviceCommissioned()) {
+        matterTemp.setTemperature(ui.temp_c);
+        matterHum.setHumidity(ui.humidity);
+        matterPress.setPressure(ui.pressure);
+      }
     }
 
     // 5. Estimate instantaneous power draw in mW
