@@ -92,6 +92,11 @@ public:
     needsFullRedraw = true;
   }
 
+  void stepViewBack() {
+    currentView = (currentView - 1 + NUM_VIEWS) % NUM_VIEWS;
+    needsFullRedraw = true;
+  }
+
   void toggleRotation() {
     rotation = (rotation == 1) ? 3 : 1;
     M5.Display.setRotation(rotation);
@@ -130,9 +135,9 @@ public:
     M5.Display.fillRect(0, 122, 240, 13, 0x18C3);
     M5.Display.setTextSize(1);
     M5.Display.setTextColor(0x9492, 0x18C3);
-    char footBuf[32];
-    snprintf(footBuf, sizeof(footBuf), "[%d/%d] BtnA:Next | BtnB:Flip", idx + 1, NUM_VIEWS);
-    M5.Display.drawString(footBuf, 16, 124);
+    char footBuf[48];
+    snprintf(footBuf, sizeof(footBuf), "[%d/%d] A:Next (2xA:Prev) | B:Sleep", idx + 1, NUM_VIEWS);
+    M5.Display.drawString(footBuf, 10, 124);
   }
 
   // View 0: Stick S3 Sensors

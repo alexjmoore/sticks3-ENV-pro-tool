@@ -59,16 +59,21 @@ const unsigned long SENSOR_INTERVAL_SLEEP  = 60000;  // 60s when display is OFF 
 const unsigned long GAS_INTERVAL           = 15000;  // 15s gas heater interval when display is ON
 const unsigned long IMU_INTERVAL           = 100;    // 100ms fast IMU polling for auto-orientation
 const unsigned long AUTO_SLEEP_TIMEOUT     = 15000;  // 15s fast auto-sleep
+const unsigned long DOUBLE_CLICK_TIME      = 280;    // 280ms window for double tap detection
 
 // Delta-threshold tracking to eliminate redundant Matter RF packets
 static float lastReportedTemp = -999.0f;
 static float lastReportedHum = -999.0f;
 static float lastReportedPress = -999.0f;
 
-// Reset hold timer (Button B on Screen 7)
+// Reset hold timer (Button B on Screen 8)
 unsigned long btnBHoldStart = 0;
 bool isHoldingReset = false;
 int lastReportedRemaining = -1;
+
+// Double-click navigation timer (Button A)
+unsigned long lastBtnAPressTime = 0;
+bool pendingBtnASingleClick = false;
 
 void setup() {
   // Downclock ESP32-S3 from 240 MHz to 80 MHz for power efficiency and cool operation
@@ -213,10 +218,12 @@ void loop() {
         ui.rotation = 1;
         M5.Display.setRotation(1);
         ui.needsFullRedraw = true;
+        ui.updateDisplay();
       } else if (ui.ax < -0.35f && ui.rotation != 3) {
         ui.rotation = 3;
         M5.Display.setRotation(3);
         ui.needsFullRedraw = true;
+        ui.updateDisplay();
       }
     }
   }
@@ -230,29 +237,55 @@ void loop() {
   if (!ui.displayOn) {
     if (btnAPressed || btnBPressed) {
       ui.wakeDisplay();
+      ui.updateDisplay();
       lastActivityTime = now;
+      pendingBtnASingleClick = false;
       delay(50);
     }
   } else {
-    // Check Auto-Sleep (30s inactivity)
+    // Check Auto-Sleep (15s inactivity)
     if (now - lastActivityTime >= AUTO_SLEEP_TIMEOUT) {
       ui.sleepDisplay();
+      pendingBtnASingleClick = false;
     }
-    // Btn A: Step through 9 views (only if not holding reset)
+    // Btn A: Single click = next view, Double click = prev view
     else if (btnAPressed && !isHoldingReset) {
-      ui.stepView();
       lastActivityTime = now;
+      if (pendingBtnASingleClick) {
+        if (now - lastBtnAPressTime < DOUBLE_CLICK_TIME) {
+          pendingBtnASingleClick = false;
+          ui.stepViewBack();
+          ui.updateDisplay();
+        } else {
+          ui.stepView();
+          ui.updateDisplay();
+          pendingBtnASingleClick = true;
+          lastBtnAPressTime = now;
+        }
+      } else {
+        pendingBtnASingleClick = true;
+        lastBtnAPressTime = now;
+      }
     }
     // Btn B on Views 0-7: Manual toggle display sleep
     else if (btnBPressed && ui.currentView != VIEW_MATTER) {
+      pendingBtnASingleClick = false;
       ui.sleepDisplay();
       lastActivityTime = now;
+    }
+
+    // Fire pending Btn A single click if double click window expired
+    if (pendingBtnASingleClick && (now - lastBtnAPressTime >= DOUBLE_CLICK_TIME)) {
+      pendingBtnASingleClick = false;
+      ui.stepView();
+      ui.updateDisplay();
     }
   }
 
   // --- Matter Factory Reset on View 8 (Hold Button B for 4s) ---
   if (ui.currentView == VIEW_MATTER && ui.displayOn) {
     if (btnBIsPressed) {
+      pendingBtnASingleClick = false;
       lastActivityTime = now; // Keep display awake while holding
       if (btnBHoldStart == 0) {
         btnBHoldStart = now;
@@ -285,6 +318,7 @@ void loop() {
         if (isHoldingReset) {
           isHoldingReset = false;
           ui.needsFullRedraw = true;
+          ui.updateDisplay();
         }
       }
     }
